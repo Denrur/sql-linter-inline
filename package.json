@@ -17,7 +17,37 @@
         "command": "sql-linter-inline.helloWorld",
         "title": "Hello World"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "sql-linter-inline",
+      "properties": {
+        "linterSQL.dbHost": {
+          "type": "string",
+          "default": "localhost",
+          "markdownDescription": "Database host address."
+        },
+        "linterSQL.dbPort": {
+          "type": "number",
+          "default": 5432,
+          "markdownDescription": "Database port."
+        },
+        "linterSQL.dbUser": {
+          "type": "string",
+          "default": "postgres",
+          "markdownDescription": "Database user."
+        },
+        "linterSQL.dbPassword": {
+          "type": "string",
+          "default": "postgres",
+          "markdownDescription": "Database password."
+        },
+        "linterSQL.dbName": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Database name."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
