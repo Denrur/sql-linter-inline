@@ -1,14 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import * as config from './config';
 
-// driver: configuration.get<string>('dbDriver'),
-// host: configuration.get<string>('dbHost'),
-// port: configuration.get<number>('dbPort'),
-// user: configuration.get<string>('dbUser'),
-// password: configuration.get<string>('dbPassword'),
-// database: configuration.get<string>('dbName'),
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
