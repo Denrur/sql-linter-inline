@@ -1,23 +1,65 @@
 import * as vscode from "vscode";
+import { connectToDatabase as connect } from "./connect";
 
-/**
- * Regex pattern to match the start of an SQL query.
- * It looks for a token (""" or " or ''' or ' or `) followed by optional whitespace and the keyword "select".
- * The pattern is case-insensitive.
- */
 const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
+const SQL_TABLE_NAME_FROM_REGEX = /FROM\s+"(\w+)".*/gi;
+const SQL_TABLE_NAME_JOIN_REGEX = /JOIN\s+"(\w+)".*/gi;
+const tables: { table_name: string; columns: string[] }[] = [];
 
 async function checkRange(
   log: vscode.OutputChannel,
   doc: vscode.TextDocument,
   range: vscode.Range
 ): Promise<vscode.Diagnostic[]> {
+  const context = (await vscode.commands.executeCommand(
+    "getContext"
+  )) as vscode.ExtensionContext;
   const diagnostics: vscode.Diagnostic[] = [];
+  let table_name_matches;
+  if (doc.languageId === "python") {
+    log.appendLine("Running");
+    const sqlStr = doc.getText(range);
+    table_name_matches = [
+      ...sqlStr.matchAll(SQL_TABLE_NAME_FROM_REGEX),
+      ...sqlStr.matchAll(SQL_TABLE_NAME_JOIN_REGEX),
+    ];
+    console.log(table_name_matches);
+    if (table_name_matches !== null) {
+      for (let match of table_name_matches) {
+        console.log(`Found Table: ${match}`);
 
-  const sqlStr = doc.getText(range);
+        const table_name = match[1];
+        log.appendLine(`${table_name}`);
+        for (let table of tables) {
+          if (table.table_name === table_name) {
+            const provider = vscode.languages.registerCompletionItemProvider(
+              "python", // Change this to the language you want to provide suggestions for
+              {
+                provideCompletionItems(
+                  document: vscode.TextDocument,
+                  position: vscode.Position
+                ) {
+                  // Array of suggestions
+                  const suggestions = table.columns.map(
+                    (column_name) =>
+                      new vscode.CompletionItem(
+                        column_name,
+                        vscode.CompletionItemKind.Snippet
+                      )
+                  );
+                  // console.log(suggestions);
 
-  log.appendLine(`linting sql: ${sqlStr}`);
-
+                  return suggestions;
+                },
+              },
+              "." // Trigger completion when the user types a dot
+            );
+            context.subscriptions.push(provider);
+          }
+        }
+      }
+    }
+  }
   return diagnostics;
 }
 
@@ -38,20 +80,14 @@ export async function refreshDiagnostics(
     let lineOfText = doc.lineAt(lineIndex).text;
     if (sqlStartLineIndex === -1) {
       if ((match = SQL_START_REGEX.exec(lineOfText)) !== null) {
-        log.appendLine(`${match}: Match found at ${lineIndex}`);
         startRangePosition = match.index + match.groups!.token.length;
         sqlStringBound = match.groups!.token;
         sqlStartLineIndex = lineIndex;
-        log.appendLine(
-          `startRangePosition ${startRangePosition}, sqlStringBound ${sqlStringBound}, sqlStartLineIndex ${sqlStartLineIndex}`
-        );
       }
     } else if (sqlStringBound !== "") {
       let endSqlIndex = lineOfText.indexOf(sqlStringBound);
-      log.appendLine(`endSqlIndex ${endSqlIndex}`);
       if (endSqlIndex !== -1) {
         sqlStringCnt += 1;
-        log.appendLine(`sqlStringCnt ${sqlStringCnt}`);
         const range = new vscode.Range(
           sqlStartLineIndex,
           startRangePosition,
@@ -73,6 +109,7 @@ export async function refreshDiagnostics(
 
   inlinesqlDiagnostics.set(doc.uri, diagnostics);
 }
+
 export async function subscribeToDocumentChanges(
   context: vscode.ExtensionContext,
   inlinesqlDiagnostics: vscode.DiagnosticCollection,
@@ -108,6 +145,63 @@ export async function activate(context: vscode.ExtensionContext) {
   console.log(
     'Congratulations, your extension "sql-linter-inline" is now active!'
   );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("getContext", () => context)
+  );
+  const log = vscode.window.createOutputChannel("Inline SQL");
+
+  const sqlStr = `select
+                  t.table_name,
+                  array_agg(c.column_name::text) as columns
+              from
+                  information_schema.tables t
+              inner join information_schema.columns c on
+                  t.table_name = c.table_name
+              where
+                  t.table_schema = 'public'
+                  and t.table_type= 'BASE TABLE'
+                  and c.table_schema = 'public'
+              group by t.table_name;;`;
+
+  const res = await connect(sqlStr);
+
+  for (let i = 0; i < res!.rows.length; i++) {
+    let table = {
+      table_name: res?.rows[i].table_name,
+      columns: res?.rows[i].columns.map((column_name: string) => column_name),
+    };
+    tables.push(table);
+  }
+  // console.log(tables);
+  log.appendLine("inline SQL activated");
+
+  const provider = vscode.languages.registerCompletionItemProvider(
+    "python", // Change this to the language you want to provide suggestions for
+    {
+      provideCompletionItems(
+        document: vscode.TextDocument,
+        position: vscode.Position
+      ) {
+        // Array of suggestions
+        const suggestions = tables.map((table) => {
+          const item = new vscode.CompletionItem(
+            `Table: ${table.table_name}`,
+            vscode.CompletionItemKind.Snippet
+          );
+          item.detail = `Table: ${table.table_name}`;
+          item.documentation = `Columns: ${table.columns.join(", ")}`;
+          item.insertText = `"${table.table_name}"`;
+          return item;
+        });
+        // console.log(suggestions);
+
+        return suggestions;
+      },
+    },
+    '"' // Trigger completion when the user types a dot
+  );
+
+  context.subscriptions.push(provider);
 
   // The command has been defined in the package.json file
   // Now provide the implementation of the command with registerCommand
@@ -128,11 +222,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.languages.createDiagnosticCollection("inlinesql");
   context.subscriptions.push(inlinesqlDiagnostics);
 
-  const log = vscode.window.createOutputChannel("Inline SQL");
-  log.appendLine("inline SQL activated");
-
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() { }
+export function deactivate() {}
