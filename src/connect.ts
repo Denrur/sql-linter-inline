@@ -1,22 +1,16 @@
-import { Client } from "pg";
-import * as config from "./config";
+import { getDB } from "./getDB";
 
-export async function connectToDatabase(query: string) {
-  const client = new Client({
-    host: config.get<string>("dbHost"),
-    port: config.get<number>("dbPort"),
-    user: config.get<string>("dbUser"),
-    password: config.get<string>("dbPassword"),
-    database: config.get<string>("dbName"),
-  });
-  try {
-    // query = "EXPLAIN " + query;
-    await client.connect();
-    const res = await client.query(query);
-    return res;
-  } catch (err) {
-    console.error("Error connecting to the database:", err);
-  } finally {
-    await client.end();
-  }
+export async function executeSQL(query: string) {
+    let client = await getDB();
+
+    try {
+        await client.connect();
+        const res = await client.query(query);
+        return res;
+    } catch (err) {
+        console.error("Error connecting to the database:", err);
+    } finally {
+        await client.disconnect();
+    }
+
 }

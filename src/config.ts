@@ -3,11 +3,13 @@ import * as vscode from "vscode";
 export const PREFIX = "linterSQL";
 
 export type Configuration = {
-  dbHost: string;
-  dbPort: number;
-  dbUser: string;
-  dbPassword: string;
-  dbName: string;
+  dbHost?: string;
+  dbPort?: number;
+  dbUser?: string;
+  dbPassword?: string;
+  dbName?: string;
+  dbType: string;
+  dbPath?: string;
 };
 
 export function getConfiguration() {
