@@ -22,35 +22,44 @@
       "title": "sql-linter-inline",
       "properties": {
         "linterSQL.dbHost": {
-            "type": "string",
-            "default": "localhost",
-            "markdownDescription": "Database host address."
+          "type": "string",
+          "default": "localhost",
+          "markdownDescription": "Database host address."
         },
         "linterSQL.dbPort": {
-            "type": "number",
-            "default": 5432,
-            "markdownDescription": "Database port."
+          "type": "number",
+          "default": 5432,
+          "markdownDescription": "Database port."
         },
         "linterSQL.dbUser": {
-            "type": "string",
-            "default": "postgres",
-            "markdownDescription": "Database user."
+          "type": "string",
+          "default": "postgres",
+          "markdownDescription": "Database user."
         },
         "linterSQL.dbPassword": {
-            "type": "string",
-            "default": "postgres",
-            "markdownDescription": "Database password."
+          "type": "string",
+          "default": "postgres",
+          "markdownDescription": "Database password."
         },
         "linterSQL.dbType": {
-            "type": "string",
-            "enum": ["postgres", "sqlite", "sqlserver"],
-            "default": "postgres",
-            "markdownDescription": "Type of the database."
+          "type": "string",
+          "enum": [
+            "postgres",
+            "sqlite",
+            "sqlserver"
+          ],
+          "default": "postgres",
+          "markdownDescription": "Type of the database."
         },
         "linterSQL.dbPath": {
-            "type": "string",
-            "default": "",
-            "markdownDescription": "Path to the SQLite database file."
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the SQLite database file."
+        },
+        "linterSQL.dbName": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Name of database"
         }
       }
     }
