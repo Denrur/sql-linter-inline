@@ -41,10 +41,25 @@
           "default": "postgres",
           "markdownDescription": "Database password."
         },
+        "linterSQL.dbType": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "sqlite",
+            "sqlserver"
+          ],
+          "default": "postgres",
+          "markdownDescription": "Type of the database."
+        },
+        "linterSQL.dbPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the SQLite database file."
+        },
         "linterSQL.dbName": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Database name."
+          "markdownDescription": "Name of database"
         }
       }
     }

@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
-import { connectToDatabase as connect } from "./connect";
+import { getDB } from "./getDB";
 
 const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
 const SQL_TABLE_NAME_FROM_REGEX = /FROM\s+"(\w+)".*/gi;
 const SQL_TABLE_NAME_JOIN_REGEX = /JOIN\s+"(\w+)".*/gi;
-const tables: { table_name: string; columns: string[] }[] = [];
+let tables: { table_name: string; columns: string[] }[] = [];
 
 async function checkRange(
   log: vscode.OutputChannel,
@@ -150,28 +150,9 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   const log = vscode.window.createOutputChannel("Inline SQL");
 
-  const sqlStr = `select
-                  t.table_name,
-                  array_agg(c.column_name::text) as columns
-              from
-                  information_schema.tables t
-              inner join information_schema.columns c on
-                  t.table_name = c.table_name
-              where
-                  t.table_schema = 'public'
-                  and t.table_type= 'BASE TABLE'
-                  and c.table_schema = 'public'
-              group by t.table_name;;`;
-
-  const res = await connect(sqlStr);
-
-  for (let i = 0; i < res!.rows.length; i++) {
-    let table = {
-      table_name: res?.rows[i].table_name,
-      columns: res?.rows[i].columns.map((column_name: string) => column_name),
-    };
-    tables.push(table);
-  }
+  let client = getDB();
+  (await client).getTables();
+  tables = (await client).tables;
   // console.log(tables);
   log.appendLine("inline SQL activated");
 
@@ -226,4 +207,4 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
