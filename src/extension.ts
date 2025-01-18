@@ -184,9 +184,9 @@ export async function activate(context: vscode.ExtensionContext) {
     "linterSQL.updateTables",
     async () => {
       console.log("Updating tables");
-      let client = getDB();
-      (await client).getTables();
-      tables = (await client).tables;
+      let client = await getDB();
+      await client.getTables();
+      tables = client.tables;
     }
   );
 
@@ -196,6 +196,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.languages.createDiagnosticCollection("inlinesql");
   context.subscriptions.push(inlinesqlDiagnostics);
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
+  await vscode.commands.executeCommand('linterSQL.updateTables');
+
 }
 
 // This method is called when your extension is deactivated
