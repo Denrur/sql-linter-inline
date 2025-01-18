@@ -9,13 +9,22 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "sql-linter-inline.helloWorld",
-        "title": "Hello World"
+        "command": "linterSQL.updateTables",
+        "title": "Update tables"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "linterSQL.updateTables",
+        "key": "ctrl+shift+q",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
@@ -59,7 +68,7 @@
         "linterSQL.dbName": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Name of database"
+          "markdownDescription": "Database name"
         }
       }
     }

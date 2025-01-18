@@ -149,10 +149,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("getContext", () => context)
   );
   const log = vscode.window.createOutputChannel("Inline SQL");
-
-  let client = getDB();
-  (await client).getTables();
-  tables = (await client).tables;
   // console.log(tables);
   log.appendLine("inline SQL activated");
 
@@ -184,27 +180,23 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(provider);
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
-  const disposable = vscode.commands.registerCommand(
-    "sql-linter-inline.helloWorld",
-    () => {
-      // The code you place here will be executed every time your command is executed
-      // Display a message box to the user
-      vscode.window.showInformationMessage(
-        "Hello World from Extension sql-linter-inline!"
-      );
+  const refreshTables = vscode.commands.registerCommand(
+    "linterSQL.updateTables",
+    async () => {
+      console.log("Updating tables");
+      let client = getDB();
+      (await client).getTables();
+      tables = (await client).tables;
     }
   );
-  context.subscriptions.push(disposable);
+
+  context.subscriptions.push(refreshTables);
 
   const inlinesqlDiagnostics =
     vscode.languages.createDiagnosticCollection("inlinesql");
   context.subscriptions.push(inlinesqlDiagnostics);
-
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() { }
+export function deactivate() {}
