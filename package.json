@@ -94,6 +94,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "node-sql-parser": "^5.3.6",
     "pg": "^8.13.1"
   }
 }
