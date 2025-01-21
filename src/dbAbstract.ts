@@ -12,7 +12,7 @@ export abstract class DatabaseConnect {
   abstract connectionStringTemplate: string;
   abstract parseConnectionString(connectionString: string): Configuration;
 
-  async setConnectionString(connectionString: string) {
+  setConnectionString(connectionString: string) {
     this.connectionString = connectionString;
   }
 
