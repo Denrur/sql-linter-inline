@@ -1,11 +1,19 @@
 import * as vscode from "vscode";
+
 import { getDB } from "./getdb";
 import { Configuration, PREFIX, getConfig, updateConfig } from "./config";
 import { DatabaseConnect } from "./dbAbstract";
+import { From, Parser } from "node-sql-parser";
 
-const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
-const SQL_TABLE_NAME_FROM_REGEX = /FROM\s+"(\w+)".*/gi;
-const SQL_TABLE_NAME_JOIN_REGEX = /JOIN\s+"(\w+)".*/gi;
+// const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
+const SQL_START_REGEX = /(?<token>"""|"|'''|'|`).*/im;
+const STRING_START_REGEX =
+  /("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/gim;
+const SQL_TEST =
+  /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|RENAME|MERGE|REPLACE|EXECUTE|CALL|DECLARE|WITH|GRANT|REVOKE|COMMIT|ROLLBACK|SAVEPOINT|SET|ANALYZE|EXPLAIN|LOCK|UNLOCK|PREPARE|DESCRIBE|SHOW|USE|DO)\b/gi;
+// const SQL_TABLE_NAME_FROM_REGEX = /.?FROM\s+"(\w+)".*/gi;
+// const SQL_TABLE_NAME_JOIN_REGEX = /.?JOIN\s+"(\w+)".*/gi;
+
 let tables: { table_name: string; columns: string[] }[] = [];
 let isUpdatingConfig = false;
 // const mysqlConnectString =
@@ -15,7 +23,8 @@ let isUpdatingConfig = false;
 async function checkRange(
   log: vscode.OutputChannel,
   doc: vscode.TextDocument,
-  range: vscode.Range
+  // range: vscode.Range
+  str: string
 ): Promise<vscode.Diagnostic[]> {
   const context = (await vscode.commands.executeCommand(
     "getContext"
@@ -24,13 +33,76 @@ async function checkRange(
   let table_name_matches;
   if (doc.languageId === "python") {
     log.appendLine("Running");
-    const sqlStr = doc.getText(range);
+    // const sqlStr = doc.getText(range);
+    const opt = {
+      database: "Postgresql",
+    };
+    const parser = new Parser();
+    console.log(str);
     table_name_matches = [
-      ...sqlStr.matchAll(SQL_TABLE_NAME_FROM_REGEX),
-      ...sqlStr.matchAll(SQL_TABLE_NAME_JOIN_REGEX),
+      ...str.matchAll(SQL_TEST),
+      // ...sqlStr.matchAll(SQL_TABLE_NAME_FROM_REGEX),
+      // ...sqlStr.matchAll(SQL_TABLE_NAME_JOIN_REGEX),
     ];
-    console.log(table_name_matches);
+    // console.log(table_name_matches);
     if (table_name_matches !== null) {
+      const ast = parser.astify(str, opt);
+      if (Array.isArray(ast)) {
+        return diagnostics;
+      }
+      if (ast && "from" in ast) {
+        if (Array.isArray(ast.from) && ast.from.length === 0) {
+          return diagnostics;
+        }
+
+        if (Array.isArray(ast.from) && ast.from.length > 0) {
+          for (let i of ast.from) {
+            if ("table" in i) {
+              console.log(i.table);
+              for (let table of tables) {
+                if (table.table_name === i.table) {
+                  let alias = i.table;
+                  if (i.as) {
+                    alias = i.as;
+                  }
+                  // context.subscriptions[0].dispose();
+                  const provider =
+                    vscode.languages.registerCompletionItemProvider(
+                      "python",
+                      {
+                        provideCompletionItems(
+                          document: vscode.TextDocument,
+                          position: vscode.Position
+                        ) {
+                          // Array of suggestions
+                          const suggestions = table.columns.map(
+                            (column_name) => {
+                              const item = new vscode.CompletionItem(
+                                `Column: ${table.table_name}.${column_name}`,
+                                vscode.CompletionItemKind.Snippet
+                              );
+                              item.detail = `Column: ${table.table_name}.${column_name}`;
+                              // item.documentation = `Columns: ${table.columns.join(", ")}`;
+                              item.insertText = `"${alias}".${column_name}`;
+                              return item;
+                            }
+                          );
+                          console.log(suggestions);
+
+                          return suggestions;
+                        },
+                      },
+                      "." // Trigger completion when the user types a dot
+                    );
+                  context.subscriptions.push(provider);
+                  console.log(context.subscriptions);
+                }
+              }
+            }
+          }
+        }
+      }
+      return diagnostics;
       for (let match of table_name_matches) {
         console.log(`Found Table: ${match}`);
 
@@ -53,7 +125,7 @@ async function checkRange(
                         vscode.CompletionItemKind.Snippet
                       )
                   );
-                  // console.log(suggestions);
+                  console.log(suggestions);
 
                   return suggestions;
                 },
@@ -76,44 +148,20 @@ export async function refreshDiagnostics(
 ): Promise<void> {
   const diagnostics: vscode.Diagnostic[] = [];
 
-  let startRangePosition = -1;
-  let sqlStringBound = "";
-  let sqlStartLineIndex = -1;
+  const docText = doc.getText();
 
-  let match;
-  let sqlStringCnt = 0;
-  for (let lineIndex = 0; lineIndex < doc.lineCount; lineIndex += 1) {
-    let lineOfText = doc.lineAt(lineIndex).text;
-    if (sqlStartLineIndex === -1) {
-      if ((match = SQL_START_REGEX.exec(lineOfText)) !== null) {
-        startRangePosition = match.index + match.groups!.token.length;
-        sqlStringBound = match.groups!.token;
-        sqlStartLineIndex = lineIndex;
-      }
-    } else if (sqlStringBound !== "") {
-      let endSqlIndex = lineOfText.indexOf(sqlStringBound);
-      if (endSqlIndex !== -1) {
-        sqlStringCnt += 1;
-        const range = new vscode.Range(
-          sqlStartLineIndex,
-          startRangePosition,
-          lineIndex,
-          endSqlIndex
-        );
-        const subDiagnostics = await checkRange(log, doc, range);
-        diagnostics.push(...subDiagnostics);
-        sqlStartLineIndex = -1;
-        sqlStringBound = "";
-      }
-    }
+  const matches = docText.match(STRING_START_REGEX);
+  if (matches === null) {
+    inlinesqlDiagnostics.set(doc.uri, diagnostics);
+    return;
   }
-  const now = new Date().toISOString();
-  if (sqlStringBound !== "") {
-    log.appendLine(`${now}: SQL string was not closed.`);
+  for (let match of matches) {
+    match = match.replace(/"""|"|'''|'|`/g, "");
+    const subDiagnostics = await checkRange(log, doc, match);
+    diagnostics.push(...subDiagnostics);
   }
-  log.appendLine(`${now}: ${sqlStringCnt} SQL strings found and linted`);
-
   inlinesqlDiagnostics.set(doc.uri, diagnostics);
+  return;
 }
 
 export async function subscribeToDocumentChanges(
@@ -263,6 +311,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Create all subscriptions
   context.subscriptions.push(inlinesqlDiagnostics);
+
   context.subscriptions.push(provider);
   context.subscriptions.push(refreshTables);
   context.subscriptions.push(
@@ -271,6 +320,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
   await vscode.commands.executeCommand(`${PREFIX}.updateTables`);
+
 }
 
 // This method is called when your extension is deactivated
