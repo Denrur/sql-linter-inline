@@ -1,10 +1,12 @@
 import { Client } from "pg";
-import * as config from "./config";
 import { DatabaseConnect } from "./dbAbstract";
+import { Configuration } from "./config";
 
 export class PostgresClient extends DatabaseConnect {
-    private client: Client;
-    public sqlForTables = `select
+  protected dbClient: Client | undefined;
+  connectionStringTemplate =
+    "postgresql://{dbUser}:{dbPassword}@{dbHost}:{dbPort}/{dbName}?{dbParams}";
+  public sqlForTables = `select
                   t.table_name,
                   array_agg(c.column_name::text) as columns
               from
@@ -16,27 +18,40 @@ export class PostgresClient extends DatabaseConnect {
                   and t.table_type= 'BASE TABLE'
                   and c.table_schema = 'public'
               group by t.table_name;`;
-    constructor() {
-        super();
-        this.client = new Client({
-            host: config.get<string>("dbHost"),
-            port: config.get<number>("dbPort"),
-            user: config.get<string>("dbUser"),
-            password: config.get<string>("dbPassword"),
-            database: config.get<string>("dbName"),
-        });
-    }
 
-    async connect(): Promise<void> {
-        await this.client.connect();
+  async connect(): Promise<void> {
+    if (this.connectionString) {
+      this.dbClient = new Client(this.connectionString);
+      await this.dbClient.connect();
     }
+  }
 
-    async query(query: string): Promise<any> {
-        return this.client.query(query);
+  async query(query: string): Promise<any> {
+    if (this.dbClient) {
+      return this.dbClient.query(query);
     }
+  }
 
-    async disconnect(): Promise<void> {
-        await this.client.end();
+  async disconnect(): Promise<void> {
+    if (this.dbClient) {
+      await this.dbClient.end();
     }
-
+  }
+  parseConnectionString(connectionString: string): Configuration {
+    const regex =
+      /^postgresql:\/\/(?<username>[^:]+):(?<password>[^@]+)@(?<host>[^:]+):(?<port>\d+)\/(?<database>[^\?]+)(\?(?<params>.*))?$/;
+    const match = connectionString.match(regex);
+    if (match && match.groups) {
+      return {
+        dbUser: match.groups.username,
+        dbPassword: match.groups.password,
+        dbHost: match.groups.host,
+        dbPort: parseInt(match.groups.port, 10),
+        dbName: match.groups.database,
+        dbParams: match.groups.params || "",
+      };
+    } else {
+      return {};
+    }
+  }
 }

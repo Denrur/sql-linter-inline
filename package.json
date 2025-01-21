@@ -54,7 +54,6 @@
           "type": "string",
           "enum": [
             "postgres",
-            "sqlite",
             "sqlserver"
           ],
           "default": "postgres",
@@ -83,6 +82,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "@types/mssql": "^9.1.6",
     "@types/node": "20.x",
     "@types/pg": "^8.11.10",
     "@types/vscode": "^1.96.0",
@@ -94,6 +94,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "mssql": "^11.0.1",
     "pg": "^8.13.1"
   }
 }
