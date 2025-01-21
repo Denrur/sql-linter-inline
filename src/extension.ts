@@ -15,119 +15,81 @@ let tables: { table_name: string; columns: string[] }[] = [];
 async function checkRange(
   log: vscode.OutputChannel,
   doc: vscode.TextDocument,
-  // range: vscode.Range
-  str: string
+  str: string,
+  context: vscode.ExtensionContext
 ): Promise<vscode.Diagnostic[]> {
-  const context = (await vscode.commands.executeCommand(
-    "getContext"
-  )) as vscode.ExtensionContext;
+  // const context = (await vscode.commands.executeCommand(
+  //   "getContext"
+  // )) as vscode.ExtensionContext;
   const diagnostics: vscode.Diagnostic[] = [];
-  let table_name_matches;
+  let sql_matches;
   if (doc.languageId === "python") {
     log.appendLine("Running");
-    // const sqlStr = doc.getText(range);
     const opt = {
       database: "Postgresql",
     };
     const parser = new Parser();
     console.log(str);
-    table_name_matches = [
-      ...str.matchAll(SQL_TEST),
-      // ...sqlStr.matchAll(SQL_TABLE_NAME_FROM_REGEX),
-      // ...sqlStr.matchAll(SQL_TABLE_NAME_JOIN_REGEX),
-    ];
-    // console.log(table_name_matches);
-    if (table_name_matches !== null) {
+    sql_matches = [...str.matchAll(SQL_TEST)];
+    if (sql_matches !== null) {
       const ast = parser.astify(str, opt);
       if (Array.isArray(ast)) {
         return diagnostics;
       }
-      if (ast && "from" in ast) {
-        if (Array.isArray(ast.from) && ast.from.length === 0) {
-          return diagnostics;
-        }
-
-        if (Array.isArray(ast.from) && ast.from.length > 0) {
-          for (let i of ast.from) {
-            if ("table" in i) {
-              console.log(i.table);
-              for (let table of tables) {
-                if (table.table_name === i.table) {
-                  let alias = i.table;
-                  if (i.as) {
-                    alias = i.as;
-                  }
-                  // context.subscriptions[0].dispose();
-                  const provider =
-                    vscode.languages.registerCompletionItemProvider(
-                      "python",
-                      {
-                        provideCompletionItems(
-                          document: vscode.TextDocument,
-                          position: vscode.Position
-                        ) {
-                          // Array of suggestions
-                          const suggestions = table.columns.map(
-                            (column_name) => {
-                              const item = new vscode.CompletionItem(
-                                `Column: ${table.table_name}.${column_name}`,
-                                vscode.CompletionItemKind.Snippet
-                              );
-                              item.detail = `Column: ${table.table_name}.${column_name}`;
-                              // item.documentation = `Columns: ${table.columns.join(", ")}`;
-                              item.insertText = `"${alias}".${column_name}`;
-                              return item;
-                            }
-                          );
-                          console.log(suggestions);
-
-                          return suggestions;
-                        },
-                      },
-                      "." // Trigger completion when the user types a dot
-                    );
-                  context.subscriptions.push(provider);
-                  console.log(context.subscriptions);
+      if (
+        ast &&
+        "from" in ast &&
+        Array.isArray(ast.from) &&
+        ast.from.length > 0
+      ) {
+        for (let i of ast.from) {
+          if ("table" in i) {
+            for (let table of tables) {
+              if (table.table_name === i.table) {
+                let alias = i.table;
+                let table = tables.find((t) => t.table_name === i.table);
+                console.log(table);
+                if (i.as) {
+                  alias = i.as;
                 }
+                const provider =
+                  vscode.languages.registerCompletionItemProvider(
+                    "python",
+                    {
+                      provideCompletionItems(
+                        document: vscode.TextDocument,
+                        position: vscode.Position
+                      ) {
+                        const suggestions = table!.columns.map(
+                          (column_name) => {
+                            const item = new vscode.CompletionItem(
+                              `Column: ${table!.table_name}.${column_name}`,
+                              vscode.CompletionItemKind.Snippet
+                            );
+                            item.detail = `Column: ${
+                              table!.table_name
+                            }.${column_name}`;
+                            // item.documentation = `Columns: ${table.columns.join(", ")}`;
+                            item.insertText = `"${alias}".${column_name}`;
+                            return item;
+                          }
+                        );
+                        console.log(suggestions);
+
+                        return suggestions;
+                      },
+                    },
+                    "." // Trigger completion when the user types a dot
+                  );
+
+                context.subscriptions.push(provider);
+                console.log(context.subscriptions);
               }
             }
           }
         }
       }
       return diagnostics;
-      for (let match of table_name_matches) {
-        console.log(`Found Table: ${match}`);
-
-        const table_name = match[1];
-        log.appendLine(`${table_name}`);
-        for (let table of tables) {
-          if (table.table_name === table_name) {
-            const provider = vscode.languages.registerCompletionItemProvider(
-              "python", // Change this to the language you want to provide suggestions for
-              {
-                provideCompletionItems(
-                  document: vscode.TextDocument,
-                  position: vscode.Position
-                ) {
-                  // Array of suggestions
-                  const suggestions = table.columns.map(
-                    (column_name) =>
-                      new vscode.CompletionItem(
-                        column_name,
-                        vscode.CompletionItemKind.Snippet
-                      )
-                  );
-                  console.log(suggestions);
-
-                  return suggestions;
-                },
-              },
-              "." // Trigger completion when the user types a dot
-            );
-            context.subscriptions.push(provider);
-          }
-        }
-      }
     }
   }
   return diagnostics;
@@ -138,8 +100,11 @@ export async function refreshDiagnostics(
   inlinesqlDiagnostics: vscode.DiagnosticCollection,
   log: vscode.OutputChannel
 ): Promise<void> {
+  const context = (await vscode.commands.executeCommand(
+    "getContext"
+  )) as vscode.ExtensionContext;
   const diagnostics: vscode.Diagnostic[] = [];
-
+  // context.subscriptions.forEach((elem) => elem.dispose());
   const docText = doc.getText();
 
   const matches = docText.match(STRING_START_REGEX);
@@ -149,7 +114,7 @@ export async function refreshDiagnostics(
   }
   for (let match of matches) {
     match = match.replace(/"""|"|'''|'|`/g, "");
-    const subDiagnostics = await checkRange(log, doc, match);
+    const subDiagnostics = await checkRange(log, doc, match, context);
     diagnostics.push(...subDiagnostics);
   }
   inlinesqlDiagnostics.set(doc.uri, diagnostics);
