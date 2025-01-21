@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
+
 import { getDB } from "./getDB";
+import { Configuration, PREFIX, getConfig, updateConfig } from "./config";
+import { DatabaseConnect } from "./dbAbstract";
 import { From, Parser } from "node-sql-parser";
 
 // const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
@@ -10,7 +13,12 @@ const SQL_TEST =
   /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|RENAME|MERGE|REPLACE|EXECUTE|CALL|DECLARE|WITH|GRANT|REVOKE|COMMIT|ROLLBACK|SAVEPOINT|SET|ANALYZE|EXPLAIN|LOCK|UNLOCK|PREPARE|DESCRIBE|SHOW|USE|DO)\b/gi;
 // const SQL_TABLE_NAME_FROM_REGEX = /.?FROM\s+"(\w+)".*/gi;
 // const SQL_TABLE_NAME_JOIN_REGEX = /.?JOIN\s+"(\w+)".*/gi;
+
 let tables: { table_name: string; columns: string[] }[] = [];
+let isUpdatingConfig = false;
+// const mysqlConnectString =
+//   "mysql://{dbUser}:{dbPassword}@{dbHost}:{dbPort}/{dbName}?{dbParams}";
+// const sqliteConnectString = "sqlite:///{dbPath}?{dbParams}";
 
 async function checkRange(
   log: vscode.OutputChannel,
@@ -150,17 +158,19 @@ export async function subscribeToDocumentChanges(
   log.appendLine("watching active editors");
 }
 
+function formatString(
+  template: string,
+  params: { [key: string]: any }
+): string {
+  return template.replace(/{(\w+)}/g, (_, key) => params[key]);
+}
+
 export async function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
   console.log(
     'Congratulations, your extension "sql-linter-inline" is now active!'
   );
-  context.subscriptions.push(
-    vscode.commands.registerCommand("getContext", () => context)
-  );
+
   const log = vscode.window.createOutputChannel("Inline SQL");
-  // console.log(tables);
   log.appendLine("inline SQL activated");
 
   const provider = vscode.languages.registerCompletionItemProvider(
@@ -181,33 +191,101 @@ export async function activate(context: vscode.ExtensionContext) {
           item.insertText = `"${table.table_name}"`;
           return item;
         });
-        // console.log(suggestions);
-
         return suggestions;
       },
     },
-    '"' // Trigger completion when the user types a dot
+    '"'
   );
 
-  context.subscriptions.push(provider);
-
   const refreshTables = vscode.commands.registerCommand(
-    "linterSQL.updateTables",
+    `${PREFIX}.updateTables`,
     async () => {
+      let client: DatabaseConnect = getDB();
       console.log("Updating tables");
-      let client = await getDB();
-      await client.getTables();
-      tables = client.tables;
+      const dbPath = vscode.workspace
+        .getConfiguration(PREFIX)
+        .get<string>("dbPath");
+      if (dbPath && client.parseConnectionString(dbPath)) {
+        await client.getTables();
+        tables = client.tables;
+      } else {
+        vscode.workspace
+          .getConfiguration(PREFIX)
+          .update(
+            "dbPath",
+            formatString(client.connectionStringTemplate, getConfig())
+          );
+      }
     }
   );
 
-  context.subscriptions.push(refreshTables);
+  vscode.workspace.onDidChangeConfiguration((event) => {
+    if (isUpdatingConfig) {
+      return;
+    }
+    const configKeys = [
+      "dbHost",
+      "dbPort",
+      "dbUser",
+      "dbPassword",
+      "dbName",
+      "dbPath",
+      "dbType",
+    ];
+
+    for (const key of configKeys) {
+      if (event.affectsConfiguration(`${PREFIX}.${key}`)) {
+        let client: DatabaseConnect = getDB();
+        const config = vscode.workspace.getConfiguration(PREFIX);
+        const dbPath = config.get<string>("dbPath");
+        let configObjFromConfig = { ...getConfig() };
+        let configObjFromPath: Configuration = {};
+        if (
+          dbPath &&
+          Object.keys(client.parseConnectionString(dbPath)).length
+        ) {
+          configObjFromPath = client.parseConnectionString(dbPath);
+        } else {
+          configObjFromPath = { ...configObjFromConfig };
+        }
+        isUpdatingConfig = true;
+        try {
+          if (key === "dbType") {
+            configObjFromPath.dbParams = "";
+          }
+          if (key !== "dbPath") {
+            config.update(
+              "dbPath",
+              formatString(client.connectionStringTemplate, {
+                ...configObjFromPath,
+                ...configObjFromConfig,
+              })
+            );
+          } else {
+            updateConfig({ ...configObjFromConfig, ...configObjFromPath });
+          }
+        } finally {
+          isUpdatingConfig = false;
+        }
+      }
+    }
+  });
 
   const inlinesqlDiagnostics =
     vscode.languages.createDiagnosticCollection("inlinesql");
+
+  // Create all subscriptions
   context.subscriptions.push(inlinesqlDiagnostics);
+
+  context.subscriptions.push(provider);
+  context.subscriptions.push(refreshTables);
+  context.subscriptions.push(
+    vscode.commands.registerCommand("getContext", () => context)
+  );
+
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
-  await vscode.commands.executeCommand("linterSQL.updateTables");
+  await vscode.commands.executeCommand(`${PREFIX}.updateTables`);
+
 }
 
 // This method is called when your extension is deactivated
