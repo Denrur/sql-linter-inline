@@ -1,4 +1,4 @@
-import { getDB } from "./getdb";
+import { getDB } from "./getDB";
 
 export async function executeSQL(query: string) {
   let client = getDB();

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-import { getDB } from "./getdb";
+import { getDB } from "./getDB";
 import { Configuration, PREFIX, getConfig, updateConfig } from "./config";
 import { DatabaseConnect } from "./dbAbstract";
 import { From, Parser } from "node-sql-parser";
