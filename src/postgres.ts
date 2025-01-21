@@ -28,7 +28,7 @@ export class PostgresClient extends DatabaseConnect {
 
   async query(query: string): Promise<any> {
     if (this.dbClient) {
-      return this.dbClient.query(query);
+      return await this.dbClient.query(query);
     }
   }
 

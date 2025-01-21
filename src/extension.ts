@@ -222,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (event.affectsConfiguration(`${PREFIX}.${key}`)) {
         let client: DatabaseConnect = getDB();
         const config = vscode.workspace.getConfiguration(PREFIX);
-        let dbPath = config.get<string>("dbPath");
+        const dbPath = config.get<string>("dbPath");
         let configObjFromConfig = { ...getConfig() };
         let configObjFromPath: Configuration = {};
         if (
@@ -248,10 +248,6 @@ export async function activate(context: vscode.ExtensionContext) {
             );
           } else {
             updateConfig({ ...configObjFromConfig, ...configObjFromPath });
-            dbPath = config.get<string>("dbPath");
-            if (dbPath) {
-              client.setConnectionString(dbPath);
-            }
           }
         } finally {
           isUpdatingConfig = false;
