@@ -4,21 +4,15 @@ import { getDB } from "./getDB";
 import { Configuration, PREFIX, getConfig, updateConfig } from "./config";
 import { DatabaseConnect } from "./dbAbstract";
 import { From, Parser } from "node-sql-parser";
+import { formatString } from "./func_utils";
 
-// const SQL_START_REGEX = /(?<token>"""|"|'''|'|`)--\s*sql/;
-const SQL_START_REGEX = /(?<token>"""|"|'''|'|`).*/im;
 const STRING_START_REGEX =
   /("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/gim;
 const SQL_TEST =
   /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|RENAME|MERGE|REPLACE|EXECUTE|CALL|DECLARE|WITH|GRANT|REVOKE|COMMIT|ROLLBACK|SAVEPOINT|SET|ANALYZE|EXPLAIN|LOCK|UNLOCK|PREPARE|DESCRIBE|SHOW|USE|DO)\b/gi;
-// const SQL_TABLE_NAME_FROM_REGEX = /.?FROM\s+"(\w+)".*/gi;
-// const SQL_TABLE_NAME_JOIN_REGEX = /.?JOIN\s+"(\w+)".*/gi;
 
 let tables: { table_name: string; columns: string[] }[] = [];
 let isUpdatingConfig = false;
-// const mysqlConnectString =
-//   "mysql://{dbUser}:{dbPassword}@{dbHost}:{dbPort}/{dbName}?{dbParams}";
-// const sqliteConnectString = "sqlite:///{dbPath}?{dbParams}";
 
 async function checkRange(
   log: vscode.OutputChannel,
@@ -26,9 +20,6 @@ async function checkRange(
   str: string,
   context: vscode.ExtensionContext
 ): Promise<vscode.Diagnostic[]> {
-  // const context = (await vscode.commands.executeCommand(
-  //   "getContext"
-  // )) as vscode.ExtensionContext;
   const diagnostics: vscode.Diagnostic[] = [];
   let sql_matches;
   if (doc.languageId === "python") {
@@ -45,58 +36,60 @@ async function checkRange(
         return diagnostics;
       }
       if (
-        ast &&
-        "from" in ast &&
-        Array.isArray(ast.from) &&
-        ast.from.length > 0
+        !ast ||
+        !("from" in ast) ||
+        !Array.isArray(ast.from) ||
+        ast.from.length === 0
       ) {
-        for (let i of ast.from) {
-          if ("table" in i) {
-            for (let table of tables) {
-              if (table.table_name === i.table) {
-                let alias = i.table;
-                let table = tables.find((t) => t.table_name === i.table);
-                console.log(table);
-                if (i.as) {
-                  alias = i.as;
-                }
-                const provider =
-                  vscode.languages.registerCompletionItemProvider(
-                    "python",
-                    {
-                      provideCompletionItems(
-                        document: vscode.TextDocument,
-                        position: vscode.Position
-                      ) {
-                        const suggestions = table!.columns.map(
-                          (column_name) => {
-                            const item = new vscode.CompletionItem(
-                              `Column: ${table!.table_name}.${column_name}`,
-                              vscode.CompletionItemKind.Snippet
-                            );
-                            item.detail = `Column: ${
-                              table!.table_name
-                            }.${column_name}`;
-                            // item.documentation = `Columns: ${table.columns.join(", ")}`;
-                            item.insertText = `"${alias}".${column_name}`;
-                            return item;
-                          }
-                        );
-                        console.log(suggestions);
+        return diagnostics;
+      }
 
-                        return suggestions;
-                      },
-                    },
-                    "." // Trigger completion when the user types a dot
-                  );
-
-                context.subscriptions.push(provider);
-                console.log(context.subscriptions);
-              }
+      for (let i of ast.from) {
+        for (let table of tables) {
+          if (!("table" in i)) {
+            return diagnostics;
+          }
+          if (table.table_name !== i.table) {
+            return diagnostics;
+          }
+          {
+            let alias = i.table;
+            let table = tables.find((t) => t.table_name === i.table);
+            console.log(table);
+            if (i.as) {
+              alias = i.as;
             }
+            const provider = vscode.languages.registerCompletionItemProvider(
+              "python",
+              {
+                provideCompletionItems(
+                  document: vscode.TextDocument,
+                  position: vscode.Position
+                ) {
+                  const suggestions = table!.columns.map((column_name) => {
+                    const item = new vscode.CompletionItem(
+                      `Column: ${table!.table_name}.${column_name}`,
+                      vscode.CompletionItemKind.Snippet
+                    );
+                    item.detail = `Column: ${table!.table_name}.${column_name}`;
+                    // item.documentation = `Columns: ${table.columns.join(", ")}`;
+                    item.insertText = `"${alias}".${column_name}`;
+                    return item;
+                  });
+                  console.log(suggestions);
+
+                  return suggestions;
+                },
+              },
+              "." // Trigger completion when the user types a dot
+            );
+
+            context.subscriptions.push(provider);
+            console.log(context.subscriptions);
           }
         }
       }
+
       return diagnostics;
     }
   }
@@ -112,7 +105,6 @@ export async function refreshDiagnostics(
     "getContext"
   )) as vscode.ExtensionContext;
   const diagnostics: vscode.Diagnostic[] = [];
-  // context.subscriptions.forEach((elem) => elem.dispose());
   const docText = doc.getText();
 
   const matches = docText.match(STRING_START_REGEX);
@@ -156,13 +148,6 @@ export async function subscribeToDocumentChanges(
     )
   );
   log.appendLine("watching active editors");
-}
-
-function formatString(
-  template: string,
-  params: { [key: string]: any }
-): string {
-  return template.replace(/{(\w+)}/g, (_, key) => params[key]);
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -285,7 +270,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
   await subscribeToDocumentChanges(context, inlinesqlDiagnostics, log);
   await vscode.commands.executeCommand(`${PREFIX}.updateTables`);
-
 }
 
 // This method is called when your extension is deactivated
